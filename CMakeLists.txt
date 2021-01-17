@@ -14,7 +14,12 @@ include_directories(
  ${project_interface_INCLUDE_DIRS}
 )
 
+add_executable(calibrate
+   src/camera_calibration.cpp
+)
+
 ## CREATE EXECUTABLE LIBRARY
+
 add_library(student SHARED
    src/student_interface.cpp
 )
@@ -22,3 +27,8 @@ add_library(student SHARED
 target_link_libraries(student
   ${OpenCV_LIBRARIES}  
 )
+
+target_link_libraries(calibrate
+  ${OpenCV_LIBRARIES}  
+)
+
