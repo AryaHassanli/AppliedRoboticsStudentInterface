@@ -10,7 +10,6 @@
 #include "student_image_elab_interface.hpp"
 #include "student_planning_interface.hpp"
 
-
 inline bool pathExists(const std::string &name) {
     std::ifstream f(name.c_str());
     return f.good();
@@ -35,12 +34,12 @@ void createCalibrationXML(const std::string save_dir, int last_image, const std:
 }
 
 
+
 namespace student {
 
 void loadImage(cv::Mat &img_out, const std::string &config_folder) {
     throw std::logic_error("STUDENT FUNCTION - LOAD IMAGE - NOT IMPLEMENTED");
 }
-
 
 void genericImageListener(const cv::Mat &img_in, std::string topic, const std::string &config_folder) {
     static bool init = false;
@@ -78,7 +77,7 @@ void genericImageListener(const cv::Mat &img_in, std::string topic, const std::s
     std::stringstream ss;
 
     switch (c) {
-        case 's':
+        case 's': //TODO: Normal Save
             break;
 
         case 'c':
@@ -90,24 +89,32 @@ void genericImageListener(const cv::Mat &img_in, std::string topic, const std::s
             image_number++;
             break;
 
-        case 'w':
-            // TODO: Wipe
-            break;
-
         default:
             break;
     }
 }
 
+void imageUndistort(const cv::Mat &img_in, cv::Mat &img_out, const cv::Mat &cam_matrix, const cv::Mat &dist_coeffs,
+                    const std::string &config_folder) {
+
+    // TODO: convert intrinsic_calibration.xml to camera_params.config automaticaly
+
+    static bool maps_initialized = false;
+    static cv::Mat full_map1, full_map2;
+
+    if (!maps_initialized) {
+        cv::Mat R;
+        cv::initUndistortRectifyMap(cam_matrix, dist_coeffs, R, cam_matrix, img_in.size(), CV_16SC2, full_map1,
+                                    full_map2);
+        maps_initialized = true;
+    }
+
+    cv::remap(img_in, img_out, full_map1, full_map2, cv::INTER_LINEAR);
+}
+
 bool extrinsicCalib(const cv::Mat &img_in, std::vector<cv::Point3f> object_points, const cv::Mat &camera_matrix,
                     cv::Mat &rvec, cv::Mat &tvec, const std::string &config_folder) {
     throw std::logic_error("STUDENT FUNCTION - EXTRINSIC CALIB - NOT IMPLEMENTED");
-}
-
-void imageUndistort(const cv::Mat &img_in, cv::Mat &img_out, const cv::Mat &cam_matrix, const cv::Mat &dist_coeffs,
-                    const std::string &config_folder) {
-    // TODO: convert intrinsic_calibration.xml to camera_params.config automaticaly 
-    //undistort(img_in, img_out, cam_matrix, dist_coeffs);
 }
 
 void findPlaneTransform(const cv::Mat &cam_matrix, const cv::Mat &rvec, const cv::Mat &tvec,
@@ -136,9 +143,6 @@ bool planPath(const Polygon &borders, const std::vector<Polygon> &obstacle_list,
               const float y, const float theta, Path &path) {
     throw std::logic_error("STUDENT FUNCTION - PLAN PATH - NOT IMPLEMENTED");
 }
-
-
-
 
 }  // namespace student
    // student
