@@ -22,6 +22,7 @@ add_executable(calibrate
 
 add_library(student SHARED
    src/student_interface.cpp
+   src/image_undistort.cpp
 )
 
 target_link_libraries(student
