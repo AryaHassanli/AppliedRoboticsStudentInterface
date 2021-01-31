@@ -1,7 +1,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include <atomic>
+#include <algorithm>
 #include <experimental/filesystem>
 #include <fstream>
 #include <sstream>
@@ -9,15 +9,11 @@
 #include <string>
 #include <vector>
 
+#include "map.hpp"
+#include "my_utils.hpp"
 #include "student_image_elab_interface.hpp"
 #include "student_planning_interface.hpp"
-
-#include "image_undistort.hpp"
-
-inline bool pathExists(const std::string &name) {
-    std::ifstream f(name.c_str());
-    return f.good();
-}
+#include "transform.hpp"
 
 void createCalibrationXML(const std::string save_dir, int last_image, const std::string &config_folder) {
     std::ofstream xml_file;
@@ -39,6 +35,10 @@ void createCalibrationXML(const std::string save_dir, int last_image, const std:
 
 namespace student {
 
+static MyUtils utils;
+static Transform transform;
+static Map map;
+
 void loadImage(cv::Mat &img_out, const std::string &config_folder) {
     throw std::logic_error("STUDENT FUNCTION - LOAD IMAGE - NOT IMPLEMENTED");
 }
@@ -58,7 +58,7 @@ void genericImageListener(const cv::Mat &img_in, std::string topic, const std::s
             ss << config_folder << "/calibration_images_" << std::setw(3) << std::setfill('0') << folder_number;
             save_dir = ss.str();
 
-            exists = pathExists(save_dir);
+            exists = utils.pathExists(save_dir);
             folder_number++;
         }
 
@@ -96,80 +96,30 @@ void genericImageListener(const cv::Mat &img_in, std::string topic, const std::s
     }
 }
 
+//////////////////////////////////////////////////////////////////
+/*                        Transforms                            */
+//////////////////////////////////////////////////////////////////
+
 void imageUndistort(const cv::Mat &img_in, cv::Mat &img_out, const cv::Mat &cam_matrix, const cv::Mat &dist_coeffs,
                     const std::string &config_folder) {
     // TODO: convert intrinsic_calibration.xml to camera_params.config automaticaly
-    static ImageUndistort image_undistort;
 
-    if(!image_undistort.isInitialized()){
-      image_undistort.initialize(img_in.size(), cam_matrix, dist_coeffs);
+    if (!transform.isInitialized()) {
+        transform.initialize(img_in.size(), cam_matrix, dist_coeffs);
     }
 
-    image_undistort.undistort(img_in, img_out);}
-
-//-------------------------------------------------------------------------
-//          EXTRINSIC CALIB IMPLEMENTATION
-//-------------------------------------------------------------------------
-
-// Defintion of the function pickNPoints and the callback mouseCallback.
-// The function pickNPoints is used to display a window with a background
-// image, and to prompt the user to select n points on this image.
-static cv::Mat bg_img;
-static std::vector<cv::Point2f> result;
-static std::string name;
-static std::atomic<bool> done;
-static int n;
-static double show_scale = 1.0;
-
-void mouseCallback(int event, int x, int y, int, void *p) {
-    if (event != cv::EVENT_LBUTTONDOWN || done.load()) return;
-
-    result.emplace_back(x * show_scale, y * show_scale);
-    cv::circle(bg_img, cv::Point(x, y), 20 / show_scale, cv::Scalar(0, 0, 255), -1);
-    cv::imshow(name.c_str(), bg_img);
-
-    if (result.size() >= n) {
-        usleep(500 * 1000);
-        done.store(true);
-    }
-}
-
-std::vector<cv::Point2f> pickNPoints(int n0, const cv::Mat &img) {
-    result.clear();
-    cv::Size small_size(img.cols / show_scale, img.rows / show_scale);
-    cv::resize(img, bg_img, small_size);
-    // bg_img = img.clone();
-    name = "Pick " + std::to_string(n0) + " points";
-    cv::imshow(name.c_str(), bg_img);
-    cv::namedWindow(name.c_str());
-    n = n0;
-
-    done.store(false);
-
-    cv::setMouseCallback(name.c_str(), &mouseCallback, nullptr);
-    while (!done.load()) {
-        cv::waitKey(500);
-    }
-
-    cv::destroyWindow(name.c_str());
-    return result;
+    transform.undistort(img_in, img_out);
 }
 
 bool extrinsicCalib(const cv::Mat &img_in, std::vector<cv::Point3f> object_points, const cv::Mat &camera_matrix,
                     cv::Mat &rvec, cv::Mat &tvec, const std::string &config_folder) {
     std::string file_path = config_folder + "/extrinsicCalib.csv";
-
     std::vector<cv::Point2f> image_points;
 
     if (!std::experimental::filesystem::exists(file_path)) {
         std::experimental::filesystem::create_directories(config_folder);
 
-        image_points = pickNPoints(4, img_in);
-        // SAVE POINT TO FILE
-        // std::cout << "IMAGE POINTS: " << std::endl;
-        // for (const auto pt: image_points) {
-        //   std::cout << pt << std::endl;
-        // }
+        image_points = utils.pickNPoints(4, img_in, "");
         std::ofstream output(file_path);
         if (!output.is_open()) {
             throw std::runtime_error("Cannot write file: " + file_path);
@@ -178,61 +128,50 @@ bool extrinsicCalib(const cv::Mat &img_in, std::vector<cv::Point3f> object_point
             output << pt.x << " " << pt.y << std::endl;
         }
         output.close();
-    } else {
-        // LOAD POINT FROM FILE
-        std::ifstream input(file_path);
-        if (!input.is_open()) {
-            throw std::runtime_error("Cannot read file: " + file_path);
-        }
-        while (!input.eof()) {
-            double x, y;
-            if (!(input >> x >> y)) {
-                if (input.eof())
-                    break;
-                else {
-                    throw std::runtime_error("Malformed file: " + file_path);
-                }
-            }
-            image_points.emplace_back(x, y);
-        }
-        input.close();
     }
 
-    cv::Mat dist_coeffs;
-    dist_coeffs = (cv::Mat1d(1, 4) << 0, 0, 0, 0, 0);
-    bool ok = cv::solvePnP(object_points, image_points, camera_matrix, dist_coeffs, rvec, tvec);
-
-    // cv::Mat Rt;
-    // cv::Rodrigues(rvec_, Rt);
-    // auto R = Rt.t();
-    // auto pos = -R * tvec_;
-
-    if (!ok) {
-        std::cerr << "FAILED SOLVE_PNP" << std::endl;
-    }
-
-    return ok;
+    return transform.extrinsicCalib(img_in, object_points, camera_matrix, rvec, tvec, config_folder);
 }
 
 void findPlaneTransform(const cv::Mat &cam_matrix, const cv::Mat &rvec, const cv::Mat &tvec,
                         const std::vector<cv::Point3f> &object_points_plane,
                         const std::vector<cv::Point2f> &dest_image_points_plane, cv::Mat &plane_transf,
                         const std::string &config_folder) {
-    cv::Mat image_points;
-
-    // project points
-    cv::projectPoints(object_points_plane, rvec, tvec, cam_matrix, cv::Mat(), image_points);
-
-    plane_transf = cv::getPerspectiveTransform(image_points, dest_image_points_plane);
+    transform.findPlaneTransform(cam_matrix, rvec, tvec, object_points_plane, dest_image_points_plane, plane_transf,
+                                 config_folder);
 }
 
 void unwarp(const cv::Mat &img_in, cv::Mat &img_out, const cv::Mat &transf, const std::string &config_folder) {
-    cv::warpPerspective(img_in, img_out, transf, img_in.size());
+    transform.unwarp(img_in, img_out, transf, config_folder);
 }
+
+//////////////////////////////////////////////////////////////////
+/*                             Map                              */
+//////////////////////////////////////////////////////////////////
 
 bool processMap(const cv::Mat &img_in, const double scale, std::vector<Polygon> &obstacle_list,
                 std::vector<std::pair<int, Polygon>> &victim_list, Polygon &gate, const std::string &config_folder) {
-    throw std::logic_error("STUDENT FUNCTION - PROCESS MAP - NOT IMPLEMENTED");
+    if (!map.is_initialized) {
+        map.initialize();
+        map.detectMasks(img_in, " For Obstacles", map.obstacle_mask_bounds);
+        map.detectMasks(img_in, " For Victim", map.victim_mask_bounds);
+        map.detectMasks(img_in, " For Gate", map.gate_mask_bounds);
+        map.detectMasks(img_in, " For Robot", map.robot_mask_bounds);
+    }
+
+    cv::Mat gaussian;
+    cv::GaussianBlur(img_in, gaussian, cv::Size(5, 5), 0);
+
+    Map::applyMasks(gaussian, map.obstacle_mask_bounds, map.obstacle_mask);
+    Map::applyMasks(gaussian, map.victim_mask_bounds, map.victim_mask);
+    Map::applyMasks(gaussian, map.gate_mask_bounds, map.gate_mask);
+
+    cv::imshow("Gaus Obs", map.obstacle_mask);
+    cv::imshow("Gaus Gate", map.gate_mask);
+    cv::imshow("Gaus Victim", map.victim_mask);
+    
+    cv::waitKey(20000);
+    return true;
 }
 
 bool findRobot(const cv::Mat &img_in, const double scale, Polygon &triangle, double &x, double &y, double &theta,
