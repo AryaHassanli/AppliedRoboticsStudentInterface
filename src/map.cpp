@@ -1,5 +1,8 @@
 #include "map.hpp"
 
+#include <leptonica/allheaders.h>
+#include <tesseract/baseapi.h>
+
 #include <experimental/filesystem>
 #include <iostream>
 #include <opencv2/opencv.hpp>
@@ -271,15 +274,19 @@ void Map::findGate(const cv::Mat &mask_in, Polygon &gate, const double scale) {
     }
 }
 
-void Map::findVictims(const cv::Mat &mask_in, std::vector<std::pair<int, Polygon>> &victims, const double scale) {
+const double MIN_AREA_SIZE = 100;
+
+void Map::findVictims(const cv::Mat &img_in, const cv::Mat &mask_in, std::vector<std::pair<int, Polygon>> &victims,
+                      const double scale) {
     std::vector<std::vector<cv::Point>> contours, contours_approx;
     std::vector<cv::Point> approx_curve;
+    std::vector<cv::Rect> boundRect;
 
     cv::findContours(mask_in, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
 
     for (int i = 0; i < contours.size(); ++i) {
         approxPolyDP(contours[i], approx_curve, 3, true);
-        if (approx_curve.size() < 8) {
+        if (approx_curve.size() < 8 || cv::contourArea(contours[i]) < MIN_AREA_SIZE) {
             continue;
         }
         Polygon scaled_contour;
@@ -290,7 +297,75 @@ void Map::findVictims(const cv::Mat &mask_in, std::vector<std::pair<int, Polygon
         // TODO: OCR
 
         victims.push_back(std::make_pair(i, scaled_contour));
+        boundRect.push_back(boundingRect(cv::Mat(approx_curve)));
     }
+
+    cv::Mat mask_invert, filtered(mask_in.rows, mask_in.cols, CV_8UC3, cv::Scalar(255, 255, 255));
+    cv::bitwise_not(mask_in, mask_invert);
+    tesseract::TessBaseAPI *ocr = new tesseract::TessBaseAPI();
+    ocr->Init(NULL, "eng");
+    // Set Page segmentation mode to PSM_SINGLE_CHAR (10)
+    ocr->SetPageSegMode(tesseract::PSM_SINGLE_CHAR);
+    // Only digits are valid output characters
+    ocr->SetVariable("tessedit_char_whitelist", "0123456789");
+    // create copy of image without green shapes
+    img_in.copyTo(filtered, mask_invert);
+
+    cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(7, 7));
+    // For each green blob in the original image containing a digit
+
+    for (int i = 0; i < boundRect.size(); i++) {
+        cv::Mat processROI(filtered, boundRect[i]);  // extract the ROI containing the digit
+        if (processROI.empty()) continue;
+
+        cv::resize(processROI, processROI, cv::Size(200, 200));  // resize the ROI
+        cv::threshold(processROI, processROI, 100, 255, 0);  // threshold and binarize the image, to suppress some noise
+
+        // Apply some additional smoothing and filtering
+        cv::dilate(processROI, processROI, kernel);
+        cv::GaussianBlur(processROI, processROI, cv::Size(13, 13), 2, 2);
+        cv::erode(processROI, processROI, kernel);
+
+        cv::dilate(processROI, processROI, kernel);
+        cv::GaussianBlur(processROI, processROI, cv::Size(13, 13), 2, 2);
+        cv::erode(processROI, processROI, kernel);
+
+        int max_conf = 0;
+        std::string max_conf_string;
+        for (int i = 0; i < 4; i++) {
+            // Set image data
+            ocr->SetImage(processROI.data, processROI.cols, processROI.rows, 3, processROI.step);
+            // Run Tesseract OCR on image and print recognized digit
+            int conf = ocr->MeanTextConf();
+            std::string ocr_text = std::string(ocr->GetUTF8Text());
+            if (ocr->MeanTextConf() > max_conf) {
+                max_conf = conf;
+                max_conf_string = ocr_text;
+                //cv::imshow("ROI", processROI);
+            }
+            cv::rotate(processROI, processROI, cv::ROTATE_90_CLOCKWISE);
+        }
+        cv::flip(processROI, processROI, 0);
+        for (int i = 0; i < 4; i++) {
+            // Set image data
+            ocr->SetImage(processROI.data, processROI.cols, processROI.rows, 3, processROI.step);
+            // Run Tesseract OCR on image and print recognized digit
+            int conf = ocr->MeanTextConf();
+            std::string ocr_text = std::string(ocr->GetUTF8Text());
+            if (ocr->MeanTextConf() > max_conf) {
+                max_conf = conf;
+                max_conf_string = ocr_text;
+                //cv::imshow("ROI", processROI);
+            }
+            cv::rotate(processROI, processROI, cv::ROTATE_90_CLOCKWISE);
+        }
+
+        std::cout << "Recognized digit: " << max_conf_string[0] << " Conf: " << max_conf << std::endl;
+        victims[i].first = max_conf_string[0] - '0';
+        //cv::waitKey(0);
+    }
+
+    ocr->End();  // destroy the ocr object (release resources)
 }
 
 bool Map::findRobot(const cv::Mat &mask_in, Polygon &triangle, const double scale) {

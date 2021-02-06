@@ -145,10 +145,10 @@ void genericImageListener(const cv::Mat &img_in, std::string topic, const std::s
 void imageUndistort(const cv::Mat &img_in, cv::Mat &img_out, const cv::Mat &cam_matrix, const cv::Mat &dist_coeffs,
                     const std::string &config_folder) {
     // TODO: convert intrinsic_calibration.xml to camera_params.config automaticaly
-    /*if (std::experimental::filesystem::exists(config_folder + "/img_to_load/")) {
+    if (std::experimental::filesystem::exists(config_folder + "/img_to_load/")) {
         img_out = img_in;
         return;
-    }*/
+    }  // TODO: Think about img_to_load situation
     if (!transform.isInitialized()) {
         transform.initialize(img_in.size(), cam_matrix, dist_coeffs);
     }
@@ -218,21 +218,9 @@ bool processMap(const cv::Mat &img_in, const double scale, std::vector<Polygon> 
     map.applyMasks(gaussian, gate_mask_bounds, gate_mask);
 
     map.findObstacles(obstacle_mask, obstacle_list, scale);
-    map.findVictims(victim_mask, victim_list, scale);
+    map.findVictims(gaussian, victim_mask, victim_list, scale);
     map.findGate(gate_mask, gate, scale);
 
-    if (show.victims) {
-        cv::imshow("victims mask", victim_mask);
-        cv::waitKey(1);
-    }
-    if (show.gate) {
-        cv::imshow("gate mask", gate_mask);
-        cv::waitKey(1);
-    }
-    if (show.obstacles) {
-        cv::imshow("obstacles mask", obstacle_mask);
-        cv::waitKey(1);
-    }
     return true;
 }
 
@@ -255,19 +243,12 @@ bool findRobot(const cv::Mat &img_in, const double scale, Polygon &triangle, dou
     map.applyMasks(gaussian, robot_mask_bounds, robot_mask);
 
     if (map.findRobot(robot_mask, triangle, scale)) {
-        x = 0;
-        y = 0;
-        for (int i = 0; i < 3; i++) {
-            x += triangle[i].x;
-            y += triangle[i].y;
-        }
-        x /= 3;
-        y /= 3;
+        Point robot_center = utils.polyCenter(triangle);
 
         double d[3];
-        d[0] = utils.pointDistance(triangle[0], Point(x, y));
-        d[1] = utils.pointDistance(triangle[1], Point(x, y));
-        d[2] = utils.pointDistance(triangle[2], Point(x, y));
+        d[0] = utils.pointDistance(triangle[0], robot_center);
+        d[1] = utils.pointDistance(triangle[1], robot_center);
+        d[2] = utils.pointDistance(triangle[2], robot_center);
 
         int max_el = std::max_element(d, d + 3) - d;
         std::swap(triangle[0], triangle[max_el]);
@@ -276,7 +257,8 @@ bool findRobot(const cv::Mat &img_in, const double scale, Polygon &triangle, dou
             cv::circle(img_in, cv::Point(triangle[0].x * scale, triangle[0].y * scale), 6, cv::Scalar(255, 0, 255), 1);
             cv::circle(img_in, cv::Point(triangle[1].x * scale, triangle[1].y * scale), 4, cv::Scalar(255, 0, 255), 1);
             cv::circle(img_in, cv::Point(triangle[2].x * scale, triangle[2].y * scale), 2, cv::Scalar(255, 0, 255), 1);
-            cv::circle(img_in, cv::Point(x * scale, y * scale), 2, cv::Scalar(255, 0, 255), 5);
+            cv::circle(img_in, cv::Point(robot_center.x * scale, robot_center.y * scale), 2, cv::Scalar(255, 0, 255),
+                       5);
             cv::imshow("Robot", img_in);
             cv::waitKey(1);
         }

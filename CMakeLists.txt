@@ -4,6 +4,9 @@ project(student_proect)
 ## Compile as C++11, supported in ROS Kinetic and newer
 add_compile_options(-std=c++11)
 
+find_package( PkgConfig REQUIRED)
+pkg_search_module( TESSERACT REQUIRED tesseract )
+pkg_search_module( LEPTONICA REQUIRED lept )
 find_package(OpenCV REQUIRED )
 find_package(project_interface REQUIRED )
 
@@ -11,8 +14,13 @@ find_package(project_interface REQUIRED )
 include_directories(
  include 
  ${OpenCV_INCLUDE_DIRS}
+ ${TESSERACT_INCLUDE_DIRS}
+ ${LEPTONICA_INCLUDE_DIRS} 
  ${project_interface_INCLUDE_DIRS}
 )
+
+link_directories( ${TESSERACT_LIBRARY_DIRS} )
+link_directories( ${LEPTONICA_LIBRARY_DIRS} )
 
 add_executable(calibrate
    src/camera_calibration.cpp
@@ -29,6 +37,12 @@ add_library(student SHARED
 
 target_link_libraries(student
   ${OpenCV_LIBRARIES}  
+)
+target_link_libraries(student
+  ${TESSERACT_LIBRARIES}
+)
+target_link_libraries(student
+  ${LEPTONICA_LIBRARIES} 
 )
 
 target_link_libraries(calibrate
