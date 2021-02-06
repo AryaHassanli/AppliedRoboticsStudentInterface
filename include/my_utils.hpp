@@ -16,6 +16,7 @@ class MyUtils {
     std::vector<cv::Point2f> pickNPoints(int n0, const cv::Mat &img, std::string msg);
 
     double pointDistance(Point a, Point b);
+    Point polyCenter(Polygon poly);
     ~MyUtils();
 
    private:

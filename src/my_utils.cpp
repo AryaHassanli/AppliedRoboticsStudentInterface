@@ -64,6 +64,18 @@ double MyUtils::pointDistance(Point a, Point b) {
     return std::sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y));
 }
 
+Point MyUtils::polyCenter(Polygon poly) {
+    double x = 0;
+    double y = 0;
+    for (int i = 0; i < poly.size(); i++) {
+        x += poly[i].x;
+        y += poly[i].y;
+    }
+    x /= poly.size();
+    y /= poly.size();
+    return Point(x, y);
+}
+
 MyUtils::~MyUtils(){
 
 };
