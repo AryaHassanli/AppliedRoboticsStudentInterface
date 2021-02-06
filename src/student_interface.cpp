@@ -15,6 +15,13 @@
 #include "student_planning_interface.hpp"
 #include "transform.hpp"
 
+const static struct Show {
+    bool robot = true;
+    bool victims = false;
+    bool gate = false;
+    bool obstacles = false;
+} show;
+
 void createCalibrationXML(const std::string save_dir, int last_image, const std::string &config_folder) {
     std::ofstream xml_file;
     std::stringstream ss;
@@ -33,14 +40,49 @@ void createCalibrationXML(const std::string save_dir, int last_image, const std:
     xml_file.close();
 }
 
-namespace student {
-
 static MyUtils utils;
 static Transform transform;
 static Map map;
 
+namespace student {
+
 void loadImage(cv::Mat &img_out, const std::string &config_folder) {
-    throw std::logic_error("STUDENT FUNCTION - LOAD IMAGE - NOT IMPLEMENTED");
+    static bool initialized = false;
+    static std::vector<cv::String> img_list;     // list of images to load
+    static size_t idx = 0;                       // idx of the current img
+    static size_t function_call_counter = 0;     // idx of the current img
+    const static size_t freeze_img_n_step = 30;  // hold the current image for n iteration
+    static cv::Mat current_img;                  // store the image for a period, avoid to load it from file every time
+
+    if (!initialized) {
+        const bool recursive = false;
+        // Load the list of jpg image contained in the config_folder/img_to_load/
+        cv::glob(config_folder + "/img_to_load/*.jpg", img_list, recursive);
+
+        if (img_list.size() > 0) {
+            initialized = true;
+            idx = 0;
+            current_img = cv::imread(img_list[idx]);
+            function_call_counter = 0;
+        } else {
+            initialized = false;
+        }
+    }
+
+    if (!initialized) {
+        throw std::logic_error("Load Image can not find any jpg image in: " + config_folder + "/img_to_load/");
+        return;
+    }
+
+    img_out = current_img;
+    function_call_counter++;
+
+    // If the function is called more than N times load increment image idx
+    if (function_call_counter > freeze_img_n_step) {
+        function_call_counter = 0;
+        idx = (idx + 1) % img_list.size();
+        current_img = cv::imread(img_list[idx]);
+    }
 }
 
 void genericImageListener(const cv::Mat &img_in, std::string topic, const std::string &config_folder) {
@@ -103,7 +145,10 @@ void genericImageListener(const cv::Mat &img_in, std::string topic, const std::s
 void imageUndistort(const cv::Mat &img_in, cv::Mat &img_out, const cv::Mat &cam_matrix, const cv::Mat &dist_coeffs,
                     const std::string &config_folder) {
     // TODO: convert intrinsic_calibration.xml to camera_params.config automaticaly
-
+    /*if (std::experimental::filesystem::exists(config_folder + "/img_to_load/")) {
+        img_out = img_in;
+        return;
+    }*/
     if (!transform.isInitialized()) {
         transform.initialize(img_in.size(), cam_matrix, dist_coeffs);
     }
@@ -119,7 +164,7 @@ bool extrinsicCalib(const cv::Mat &img_in, std::vector<cv::Point3f> object_point
     if (!std::experimental::filesystem::exists(file_path)) {
         std::experimental::filesystem::create_directories(config_folder);
 
-        image_points = utils.pickNPoints(4, img_in, "");
+        image_points = utils.pickNPoints(4, img_in, " For Extrinsic Calibration");
         std::ofstream output(file_path);
         if (!output.is_open()) {
             throw std::runtime_error("Cannot write file: " + file_path);
@@ -151,32 +196,96 @@ void unwarp(const cv::Mat &img_in, cv::Mat &img_out, const cv::Mat &transf, cons
 
 bool processMap(const cv::Mat &img_in, const double scale, std::vector<Polygon> &obstacle_list,
                 std::vector<std::pair<int, Polygon>> &victim_list, Polygon &gate, const std::string &config_folder) {
-    if (!map.is_initialized) {
-        map.initialize();
-        map.detectMasks(img_in, " For Obstacles", map.obstacle_mask_bounds);
-        map.detectMasks(img_in, " For Victim", map.victim_mask_bounds);
-        map.detectMasks(img_in, " For Gate", map.gate_mask_bounds);
-        map.detectMasks(img_in, " For Robot", map.robot_mask_bounds);
-    }
+    static cv::Mat obstacle_mask, victim_mask, gate_mask;
+    static std::vector<MaskBound> obstacle_mask_bounds, victim_mask_bounds, gate_mask_bounds;
 
     cv::Mat gaussian;
+    cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size((2 * 2) + 1, (2 * 2) + 1));
+
     cv::GaussianBlur(img_in, gaussian, cv::Size(5, 5), 0);
+    cv::dilate(gaussian, gaussian, kernel);
+    cv::erode(gaussian, gaussian, kernel);
 
-    Map::applyMasks(gaussian, map.obstacle_mask_bounds, map.obstacle_mask);
-    Map::applyMasks(gaussian, map.victim_mask_bounds, map.victim_mask);
-    Map::applyMasks(gaussian, map.gate_mask_bounds, map.gate_mask);
+    if (!map.isInitialized()) {
+        map.initialize(img_in, config_folder);
+        map.getObstaclesBounds(img_in, obstacle_mask_bounds, config_folder);
+        map.getVictimsBounds(img_in, victim_mask_bounds, config_folder);
+        map.getGateBounds(img_in, gate_mask_bounds, config_folder);
+    }
 
-    cv::imshow("Gaus Obs", map.obstacle_mask);
-    cv::imshow("Gaus Gate", map.gate_mask);
-    cv::imshow("Gaus Victim", map.victim_mask);
-    
-    cv::waitKey(20000);
+    map.applyMasks(gaussian, obstacle_mask_bounds, obstacle_mask);
+    map.applyMasks(gaussian, victim_mask_bounds, victim_mask);
+    map.applyMasks(gaussian, gate_mask_bounds, gate_mask);
+
+    map.findObstacles(obstacle_mask, obstacle_list, scale);
+    map.findVictims(victim_mask, victim_list, scale);
+    map.findGate(gate_mask, gate, scale);
+
+    if (show.victims) {
+        cv::imshow("victims mask", victim_mask);
+        cv::waitKey(1);
+    }
+    if (show.gate) {
+        cv::imshow("gate mask", gate_mask);
+        cv::waitKey(1);
+    }
+    if (show.obstacles) {
+        cv::imshow("obstacles mask", obstacle_mask);
+        cv::waitKey(1);
+    }
     return true;
 }
 
 bool findRobot(const cv::Mat &img_in, const double scale, Polygon &triangle, double &x, double &y, double &theta,
                const std::string &config_folder) {
-    throw std::logic_error("STUDENT FUNCTION - FIND ROBOT - NOT IMPLEMENTED");
+    static cv::Mat robot_mask;
+    static std::vector<MaskBound> robot_mask_bounds;
+    if (!map.isInitialized()) {
+        map.initialize(img_in, config_folder);
+        map.getRobotBounds(img_in, robot_mask_bounds, config_folder);
+    }
+
+    cv::Mat gaussian;
+    cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size((2 * 2) + 1, (2 * 2) + 1));
+
+    cv::GaussianBlur(img_in, gaussian, cv::Size(5, 5), 0);
+    cv::dilate(gaussian, gaussian, kernel);
+    cv::erode(gaussian, gaussian, kernel);
+
+    map.applyMasks(gaussian, robot_mask_bounds, robot_mask);
+
+    if (map.findRobot(robot_mask, triangle, scale)) {
+        x = 0;
+        y = 0;
+        for (int i = 0; i < 3; i++) {
+            x += triangle[i].x;
+            y += triangle[i].y;
+        }
+        x /= 3;
+        y /= 3;
+
+        double d[3];
+        d[0] = utils.pointDistance(triangle[0], Point(x, y));
+        d[1] = utils.pointDistance(triangle[1], Point(x, y));
+        d[2] = utils.pointDistance(triangle[2], Point(x, y));
+
+        int max_el = std::max_element(d, d + 3) - d;
+        std::swap(triangle[0], triangle[max_el]);
+
+        if (show.robot) {
+            cv::circle(img_in, cv::Point(triangle[0].x * scale, triangle[0].y * scale), 6, cv::Scalar(255, 0, 255), 1);
+            cv::circle(img_in, cv::Point(triangle[1].x * scale, triangle[1].y * scale), 4, cv::Scalar(255, 0, 255), 1);
+            cv::circle(img_in, cv::Point(triangle[2].x * scale, triangle[2].y * scale), 2, cv::Scalar(255, 0, 255), 1);
+            cv::circle(img_in, cv::Point(x * scale, y * scale), 2, cv::Scalar(255, 0, 255), 5);
+            cv::imshow("Robot", img_in);
+            cv::waitKey(1);
+        }
+
+        theta = std::atan2(y - triangle[0].y, x - triangle[0].x);
+        return true;
+    } else {
+        return false;
+    }
 }
 
 bool planPath(const Polygon &borders, const std::vector<Polygon> &obstacle_list,
