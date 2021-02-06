@@ -22,9 +22,9 @@ add_executable(calibrate
 
 add_library(student SHARED
   src/my_utils.cpp
-  src/student_interface.cpp
   src/transform.cpp
   src/map.cpp
+  src/student_interface.cpp
 )
 
 target_link_libraries(student
