@@ -1,5 +1,6 @@
 #include "my_utils.hpp"
 
+#include <math.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -25,7 +26,7 @@ void MyUtils::mouseCallback(int event, int x, int y, int, void *p) {
     cv::circle(t->bg_img, cv::Point(x, y), 11 / t->show_scale, cv::Scalar(255, 255, 255), 1);
     cv::circle(t->bg_img, cv::Point(x, y), 10 / t->show_scale, cv::Scalar(0, 0, 0), 1);
     cv::circle(t->bg_img, cv::Point(x, y), 9 / t->show_scale, cv::Scalar(255, 255, 255), 1);
-    
+
     cv::circle(t->bg_img, cv::Point(x, y), 1 / t->show_scale, cv::Scalar(255, 255, 255), -1);
     cv::circle(t->bg_img, cv::Point(x, y), 2 / t->show_scale, cv::Scalar(0, 0, 0), 1);
     cv::circle(t->bg_img, cv::Point(x, y), 3 / t->show_scale, cv::Scalar(255, 255, 255), 1);
@@ -57,6 +58,10 @@ std::vector<cv::Point2f> MyUtils::pickNPoints(int n0, const cv::Mat &img, std::s
 
     cv::destroyWindow(name.c_str());
     return result;
+}
+
+double MyUtils::pointDistance(Point a, Point b) {
+    return std::sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y));
 }
 
 MyUtils::~MyUtils(){

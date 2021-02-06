@@ -5,6 +5,7 @@
 #include <iostream>
 #include <opencv2/opencv.hpp>
 
+#include "utils.hpp"
 
 class MyUtils {
    public:
@@ -14,6 +15,7 @@ class MyUtils {
     static void mouseCallback(int event, int x, int y, int, void *p);
     std::vector<cv::Point2f> pickNPoints(int n0, const cv::Mat &img, std::string msg);
 
+    double pointDistance(Point a, Point b);
     ~MyUtils();
 
    private:
