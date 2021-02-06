@@ -6,7 +6,7 @@ Transform::Transform() { is_initialized_ = false; };
 
 bool Transform::isInitialized() const { return is_initialized_; }
 
-bool Transform::initialize(const cv::Size& img_size, const cv::Mat& cam_matrix, const cv::Mat& dist_coeffs) {
+bool Transform::initialize(const cv::Size &img_size, const cv::Mat &cam_matrix, const cv::Mat &dist_coeffs) {
     if (is_initialized_) {
         return true;
     }
@@ -18,7 +18,7 @@ bool Transform::initialize(const cv::Size& img_size, const cv::Mat& cam_matrix, 
     return is_initialized_;
 }
 
-bool Transform::undistort(const cv::Mat& img_in, cv::Mat& img_out) {
+bool Transform::undistort(const cv::Mat &img_in, cv::Mat &img_out) {
     if (!isInitialized()) {
         return false;
     }
@@ -26,9 +26,9 @@ bool Transform::undistort(const cv::Mat& img_in, cv::Mat& img_out) {
     return true;
 }
 
-bool Transform::extrinsicCalib(const cv::Mat& img_in, std::vector<cv::Point3f> object_points,
-                               const cv::Mat& camera_matrix, cv::Mat& rvec, cv::Mat& tvec,
-                               const std::string& config_folder) {
+bool Transform::extrinsicCalib(const cv::Mat &img_in, std::vector<cv::Point3f> object_points,
+                               const cv::Mat &camera_matrix, cv::Mat &rvec, cv::Mat &tvec,
+                               const std::string &config_folder) {
     std::string file_path = config_folder + "/extrinsicCalib.csv";
     std::vector<cv::Point2f> image_points;
 
@@ -54,11 +54,6 @@ bool Transform::extrinsicCalib(const cv::Mat& img_in, std::vector<cv::Point3f> o
     dist_coeffs = (cv::Mat1d(1, 4) << 0, 0, 0, 0, 0);
     bool ok = cv::solvePnP(object_points, image_points, camera_matrix, dist_coeffs, rvec, tvec);
 
-    // cv::Mat Rt;
-    // cv::Rodrigues(rvec_, Rt);
-    // auto R = Rt.t();
-    // auto pos = -R * tvec_;
-
     if (!ok) {
         std::cerr << "FAILED SOLVE_PNP" << std::endl;
     }
@@ -66,11 +61,10 @@ bool Transform::extrinsicCalib(const cv::Mat& img_in, std::vector<cv::Point3f> o
     return ok;
 }
 
-
 void Transform::findPlaneTransform(const cv::Mat &cam_matrix, const cv::Mat &rvec, const cv::Mat &tvec,
-                        const std::vector<cv::Point3f> &object_points_plane,
-                        const std::vector<cv::Point2f> &dest_image_points_plane, cv::Mat &plane_transf,
-                        const std::string &config_folder) {
+                                   const std::vector<cv::Point3f> &object_points_plane,
+                                   const std::vector<cv::Point2f> &dest_image_points_plane, cv::Mat &plane_transf,
+                                   const std::string &config_folder) {
     cv::Mat image_points;
 
     cv::projectPoints(object_points_plane, rvec, tvec, cam_matrix, cv::Mat(), image_points);
@@ -78,7 +72,8 @@ void Transform::findPlaneTransform(const cv::Mat &cam_matrix, const cv::Mat &rve
     plane_transf = cv::getPerspectiveTransform(image_points, dest_image_points_plane);
 }
 
-void Transform::unwarp(const cv::Mat &img_in, cv::Mat &img_out, const cv::Mat &transf, const std::string &config_folder) {
+void Transform::unwarp(const cv::Mat &img_in, cv::Mat &img_out, const cv::Mat &transf,
+                       const std::string &config_folder) {
     cv::warpPerspective(img_in, img_out, transf, img_in.size());
 }
-Transform::~Transform() {};
+Transform::~Transform(){};
