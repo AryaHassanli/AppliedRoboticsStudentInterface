@@ -240,7 +240,7 @@ void Map::findObstacles(const cv::Mat &mask_in, std::vector<Polygon> &obstacles,
 
     cv::findContours(mask_in, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
 
-    for (int i = 0; i < contours.size(); ++i) {
+    for (int i = 0; i < contours.size(); i++) {
         approxPolyDP(contours[i], approx_curve, 5, true);
 
         Polygon scaled_contour;
@@ -259,8 +259,8 @@ void Map::findGate(const cv::Mat &mask_in, Polygon &gate, const double scale) {
 
     cv::findContours(mask_in, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
 
-    for (int i = 0; i < contours.size(); ++i) {
-        approxPolyDP(contours[i], approx_curve, 20, true);
+    for (int i = 0; i < contours.size(); i++) {
+        approxPolyDP(contours[i], approx_curve, 5, true);
 
         if (approx_curve.size() != 4) {
             continue;
@@ -277,15 +277,15 @@ void Map::findGate(const cv::Mat &mask_in, Polygon &gate, const double scale) {
 const double MIN_AREA_SIZE = 100;
 
 void Map::findVictims(const cv::Mat &img_in, const cv::Mat &mask_in, std::vector<std::pair<int, Polygon>> &victims,
-                      const double scale) {
+                      const double scale, const bool show_ocr) {
     std::vector<std::vector<cv::Point>> contours, contours_approx;
     std::vector<cv::Point> approx_curve;
     std::vector<cv::Rect> boundRect;
 
     cv::findContours(mask_in, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
 
-    for (int i = 0; i < contours.size(); ++i) {
-        approxPolyDP(contours[i], approx_curve, 3, true);
+    for (int i = 0; i < contours.size(); i++) {
+        approxPolyDP(contours[i], approx_curve, 5, true);
         if (approx_curve.size() < 8 || cv::contourArea(contours[i]) < MIN_AREA_SIZE) {
             continue;
         }
@@ -341,7 +341,9 @@ void Map::findVictims(const cv::Mat &img_in, const cv::Mat &mask_in, std::vector
             if (ocr->MeanTextConf() > max_conf) {
                 max_conf = conf;
                 max_conf_string = ocr_text;
-                //cv::imshow("ROI", processROI);
+                if (show_ocr) {
+                    cv::imshow("ROI", processROI);
+                }
             }
             cv::rotate(processROI, processROI, cv::ROTATE_90_CLOCKWISE);
         }
@@ -355,14 +357,19 @@ void Map::findVictims(const cv::Mat &img_in, const cv::Mat &mask_in, std::vector
             if (ocr->MeanTextConf() > max_conf) {
                 max_conf = conf;
                 max_conf_string = ocr_text;
-                //cv::imshow("ROI", processROI);
+                if (show_ocr) {
+                    cv::imshow("ROI", processROI);
+                }
             }
             cv::rotate(processROI, processROI, cv::ROTATE_90_CLOCKWISE);
         }
 
         std::cout << "Recognized digit: " << max_conf_string[0] << " Conf: " << max_conf << std::endl;
         victims[i].first = max_conf_string[0] - '0';
-        //cv::waitKey(0);
+        if (show_ocr) {
+            cv::waitKey(0);
+            cv::destroyWindow("ROI");
+        }
     }
 
     ocr->End();  // destroy the ocr object (release resources)
