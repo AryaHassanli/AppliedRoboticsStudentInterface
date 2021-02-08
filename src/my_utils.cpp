@@ -76,6 +76,46 @@ Point MyUtils::polyCenter(Polygon poly) {
     return Point(x, y);
 }
 
+std::vector<cv::Point> MyUtils::cvPoly(Polygon poly) {
+    std::vector<cv::Point> tmp;
+    for (int i = 0; i < poly.size(); i++) {
+        tmp.push_back(cv::Point2f(poly[i].x, poly[i].y));
+    }
+    return tmp;
+}
+
+Polygon MyUtils::scalePoly(Polygon poly, double scale) {
+    for (int i = 0; i < poly.size(); i++) {
+        poly[i].x *= scale;
+        poly[i].y *= scale;
+    }
+    return poly;
+}
+
+void MyUtils::drawPoly(cv::Mat &img, Polygon poly, double scale, cv::Scalar color, int thickness) {
+    std::vector<std::vector<cv::Point>> tmp;
+
+    poly = scalePoly(poly, scale);
+    tmp.push_back(cvPoly(poly));
+    cv::drawContours(img, tmp, -1, color, thickness);
+}
+
+void MyUtils::drawPoints(cv::Mat &img, std::vector<Point> points, double scale, cv::Scalar color, int thickness) {
+    for (int i = 0; i < points.size(); i++) {
+        double x = points[i].x * scale;
+        double y = points[i].y * scale;
+        cv::circle(img, cv::Point2f(x, y), 1, color, thickness);
+    }
+}
+
+Point MyUtils::scalePoint(Point point, double scale) {
+    double x = point.x * scale;
+    double y = point.y * scale;
+    return Point(x, y);
+}
+
+cv::Point2f MyUtils::cvPoint(Point point) { return cv::Point2f(point.x, point.y); }
+
 MyUtils::~MyUtils(){
 
 };

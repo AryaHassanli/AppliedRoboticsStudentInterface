@@ -7,6 +7,12 @@
 
 #include "utils.hpp"
 
+#define MY_COLOR_RED cv::Scalar(0, 0, 255)
+#define MY_COLOR_WHITE cv::Scalar(255, 255, 255)
+#define MY_COLOR_BLACK cv::Scalar(0, 0, 0)
+#define MY_COLOR_GREEN cv::Scalar(0, 255, 0)
+#define MY_COLOR_BLUE cv::Scalar(255, 0, 0)
+
 class MyUtils {
    public:
     MyUtils();
@@ -15,8 +21,18 @@ class MyUtils {
     static void mouseCallback(int event, int x, int y, int, void *p);
     std::vector<cv::Point2f> pickNPoints(int n0, const cv::Mat &img, std::string msg);
 
-    double pointDistance(Point a, Point b);
-    Point polyCenter(Polygon poly);
+    static double pointDistance(Point a, Point b);
+    static Point polyCenter(Polygon poly);
+
+    static std::vector<cv::Point> cvPoly(Polygon poly);
+    static cv::Point2f cvPoint(Point point);
+
+    static Polygon scalePoly(Polygon poly, double scale);
+    static Point scalePoint(Point point, double scale);
+
+    static void drawPoly(cv::Mat &img, Polygon poly, double scale, cv::Scalar color, int thickness);
+    static void drawPoints(cv::Mat &img, std::vector<Point> points, double scale, cv::Scalar color, int thickness);
+
     ~MyUtils();
 
    private:
