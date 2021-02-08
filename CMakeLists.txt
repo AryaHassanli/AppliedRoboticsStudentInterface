@@ -32,6 +32,8 @@ add_library(student SHARED
   src/my_utils.cpp
   src/transform.cpp
   src/map.cpp
+  src/plan.cpp
+  src/halton.cpp
   src/student_interface.cpp
 )
 
