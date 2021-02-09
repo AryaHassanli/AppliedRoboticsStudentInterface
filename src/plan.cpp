@@ -5,9 +5,18 @@
 #include <iostream>
 #include <opencv2/opencv.hpp>
 
+#include "dubins.hpp"
 #include "halton.hpp"
 #include "my_utils.hpp"
 #include "utils.hpp"
+#define INF_DIST 100000
+
+#define show_scale 600.0
+#define NUM_HALTON_POINTS 499
+#define OBST_MARGIN 0.10
+#define MAX_K_NEIGHBOURS 6
+#define MAP_SECTIONS 7
+#define BORD_MARGIN 0.05
 
 Plan::Plan(){
 
@@ -16,14 +25,6 @@ Plan::Plan(){
 Plan::~Plan(){
 
 };
-
-#define show_scale 600.0
-#define NUM_HALTON_POINTS 499
-#define OBST_MARGIN 0.06
-#define MAX_K_NEIGHBOURS 4
-#define MAP_SECTIONS 12
-#define BORD_MARGIN 0.05
-#define INF_DIST 10000
 
 double map_width;
 double map_height;
@@ -34,8 +35,6 @@ Node *robot_node;
 std::vector<Node *> victim_nodes;
 std::vector<Node *> section_to_points[MAP_SECTIONS][MAP_SECTIONS];
 std::map<Node *, std::pair<int, int>> point_to_section;
-
-std::vector<std::vector<Node *>> routes;
 
 bool nodeLessThan(Node *a, Node *b) { return a->distance < b->distance; }
 
@@ -174,6 +173,7 @@ std::vector<Point> Plan::getFreePoints(std::vector<Point> points, const std::vec
 }
 
 void Plan::createGraph(cv::Mat &map, std::vector<Point> halton_points,
+                       const std::vector<Polygon> &margined_obstacle_list,
                        const std::vector<std::pair<int, Polygon>> &victim_list, const Polygon &gate, const float x,
                        const float y) {
     for (int i = 0; i < halton_points.size(); i++) {
@@ -188,8 +188,7 @@ void Plan::createGraph(cv::Mat &map, std::vector<Point> halton_points,
         point_to_section[node] = std::make_pair(x_section, y_section);
     }
 
-    // Add One node for each Victim, Robot, and Gate
-
+    // Add One node for Gate
     Point gate_center = MyUtils::polyCenter(gate);
     gate_node = new Node(-1, gate_center.x, gate_center.y);
     int x_section = gate_center.x * ((double)MAP_SECTIONS - 0.0001) / map_width;
@@ -198,6 +197,7 @@ void Plan::createGraph(cv::Mat &map, std::vector<Point> halton_points,
     point_to_section[gate_node] = std::make_pair(x_section, y_section);
     nodes.push_back(gate_node);
 
+    // Add One node for Robot
     robot_node = new Node(-2, x, y);
     x_section = x * ((double)MAP_SECTIONS - 0.0001) / map_width;
     y_section = y * ((double)MAP_SECTIONS - 0.0001) / map_height;
@@ -208,7 +208,7 @@ void Plan::createGraph(cv::Mat &map, std::vector<Point> halton_points,
     // Sort Victims
     std::vector<std::pair<int, Polygon>> victims = victim_list;
     std::sort(victims.begin(), victims.end(), victimLessThan);
-
+    // Add victim Nodes
     victim_nodes.clear();
     for (int i = 0; i < victims.size(); i++) {
         Point victim_center = MyUtils::polyCenter(victims[i].second);
@@ -219,7 +219,6 @@ void Plan::createGraph(cv::Mat &map, std::vector<Point> halton_points,
         point_to_section[victim_node] = std::make_pair(x_section, y_section);
         victim_nodes.push_back(victim_node);
     }
-
     nodes.insert(nodes.end(), victim_nodes.begin(), victim_nodes.end());
 
     // Find neighbours
@@ -234,8 +233,13 @@ void Plan::createGraph(cv::Mat &map, std::vector<Point> halton_points,
              x_sec_it++) {
             for (int y_sec_it = std::max(y_section - 1, 0); y_sec_it <= std::min(y_section + 1, MAP_SECTIONS - 1);
                  y_sec_it++) {
-                possible_neighbours.insert(possible_neighbours.end(), section_to_points[x_sec_it][y_sec_it].begin(),
-                                           section_to_points[x_sec_it][y_sec_it].end());
+                for (int k = 0; k < section_to_points[x_sec_it][y_sec_it].size(); k++) {
+                    Node *nei = section_to_points[x_sec_it][y_sec_it][k];
+                    if (!MyUtils::segPolysCollision(Point(node->x, node->y), Point(nei->x, nei->y),
+                                                    margined_obstacle_list)) {
+                        possible_neighbours.push_back(nei);
+                    }
+                }
             }
         }
 
@@ -243,7 +247,7 @@ void Plan::createGraph(cv::Mat &map, std::vector<Point> halton_points,
         possible_neighbours.erase(std::remove(possible_neighbours.begin(), possible_neighbours.end(), node),
                                   possible_neighbours.end());
 
-        // Keep nearest nodes
+        // Keep nearest neighbours
         for (int j = 0; j < possible_neighbours.size(); j++) {
             Node *nei = possible_neighbours[j];
             nei->distance = MyUtils::pointDistance(Point(node->x, node->y), Point(nei->x, nei->y));
@@ -254,12 +258,11 @@ void Plan::createGraph(cv::Mat &map, std::vector<Point> halton_points,
             node->neighbours.end(), possible_neighbours.begin(),
             possible_neighbours.begin() + std::min(MAX_K_NEIGHBOURS, (int)possible_neighbours.size()));
 
+        // Draw Neighbours
         for (int j = 0; j < node->neighbours.size(); j++) {
             cv::line(map, cv::Point(node->neighbours[j]->x * show_scale, node->neighbours[j]->y * show_scale),
-                     cv::Point(node->x * show_scale, node->y * show_scale), MY_COLOR_BLUE, 1);
+                     cv::Point(node->x * show_scale, node->y * show_scale), cv::Scalar(100, 0, 0), 1);
         }
-
-        // TODO: Remove Collisions
     }
 };
 
@@ -313,17 +316,49 @@ std::vector<Node *> Plan::findRoute(Node *source, Node *target) {
     return route;
 };
 
-void Plan::drawRoute(cv::Mat &img, std::vector<Node *> route) {
+void Plan::drawRoute(cv::Mat &img, std::vector<Node *> route, int thickness) {
     Node *current = route[0];
     for (int i = 1; i < route.size(); i++) {
         cv::Point a = cv::Point(current->x * show_scale, current->y * show_scale);
         cv::Point b = cv::Point(route[i]->x * show_scale, route[i]->y * show_scale);
-        cv::line(img, a, b, MY_COLOR_WHITE, 3);
+        cv::line(img, a, b, MY_COLOR_WHITE, thickness);
         current = route[i];
     }
 }
 
-void Plan::initialize(const Polygon &borders, const std::vector<Polygon> &obstacle_list,
+std::vector<Node *> Plan::smoothRoute(std::vector<Node *> route, const std::vector<Polygon> &margined_obstacle_list) {
+    std::vector<Node *> new_route;
+    if (route.size() == 2) {
+        return route;
+    }
+    Node *source = route[0];
+    Node *target = route[route.size() - 1];
+    if (!MyUtils::segPolysCollision(Point(source->x, source->y), Point(target->x, target->y), margined_obstacle_list)) {
+        new_route.push_back(source);
+        new_route.push_back(target);
+        return new_route;
+    }
+    int half = route.size() / 2;
+    std::vector<Node *> first_half;
+    std::vector<Node *> second_half;
+    first_half.insert(first_half.end(), route.begin(), route.begin() + half + 1);
+    second_half.insert(second_half.end(), route.begin() + half, route.end());
+    first_half = smoothRoute(first_half, margined_obstacle_list);
+    second_half = smoothRoute(second_half, margined_obstacle_list);
+
+    new_route.insert(new_route.end(), first_half.begin(), first_half.end());
+    new_route.insert(new_route.end(), second_half.begin() + 1, second_half.end());
+    return new_route;
+}
+
+double kp = 40.0;
+int createDubinsSteps(double q[3], double x, void *user_data) {
+    std::vector<Pose> *samples = (std::vector<Pose> *)user_data;
+    samples->push_back(Pose(x, q[0], q[1], q[2], kp));
+    return 0;
+}
+
+void Plan::plan(const Polygon &borders, const std::vector<Polygon> &obstacle_list,
                       const std::vector<std::pair<int, Polygon>> &victim_list, const Polygon &gate, const float x,
                       const float y, const float theta, Path &path, const std::string &config_folder) {
     cv::Mat map;
@@ -354,33 +389,92 @@ void Plan::initialize(const Polygon &borders, const std::vector<Polygon> &obstac
 
     // Remove points with collision
     halton_points = getFreePoints(halton_points, margined_obstacle_list, victim_list, gate);
-    MyUtils::drawPoints(map, halton_points, show_scale, MY_COLOR_WHITE, 2);
+    MyUtils::drawPoints(map, halton_points, show_scale, cv::Scalar(180, 180, 180), 2);
     showMap(map);
 
     // Create Graph nodes and map sections
-    createGraph(map, halton_points, victim_list, gate, x, y);
+    createGraph(map, halton_points, margined_obstacle_list, victim_list, gate, x, y);
     showMap(map);
 
-    // Find Route
-    std::cout << victim_nodes.size() << "\n";
-    std::cout << victim_list.size() << "\n";
-
+    // Find Route and Draw it
+    std::vector<std::vector<Node *>> routes;
+    Node *current = robot_node;
     if (victim_nodes.size()) {
-        Node *current = robot_node;
         for (int i = 0; i < victim_nodes.size(); i++) {
-            std::vector<Node *> route = findRoute(current, victim_nodes[i]);
-            drawRoute(map, route);
+            std::vector<Node *> tmp_route = findRoute(current, victim_nodes[i]);
+            routes.push_back(tmp_route);
+            drawRoute(map, tmp_route, 2);
             current = victim_nodes[i];
             showMap(map);
         }
-        std::vector<Node *> route = findRoute(current, gate_node);
-        drawRoute(map, route);
+    }
+    std::vector<Node *> tmp_route = findRoute(current, gate_node);
+    routes.push_back(tmp_route);
+    drawRoute(map, tmp_route, 2);
+    showMap(map);
+
+    // Smooth
+    for (int i = 0; i < routes.size(); i++) {
+        std::vector<Node *> route = routes[i];
+        route = smoothRoute(route, margined_obstacle_list);
+        route = smoothRoute(route, margined_obstacle_list);
+        route = smoothRoute(route, margined_obstacle_list);
+        routes[i] = route;
+        drawRoute(map, route, 3);
         showMap(map);
     }
+    // merge all routes to single list of nodes
+    std::vector<Node *> route;
+    route.push_back(robot_node);
+    for (int i = 0; i < routes.size(); i++) {
+        route.insert(route.end(), routes[i].begin() + 1, routes[i].end());
+    }
 
-    // Draw Route
+    // TMP
+    double begin_ang = theta;
+    double end_ang = 0;
+    current = route[0];
+    for (int i = 1; i < route.size(); i++) {
+        Node *target = route[i];
 
-    // TODO: Smooth
+        Node *next_target = i < route.size() - 1 ? route[i + 1] : NULL;
+        end_ang = next_target != NULL ? std::atan2(next_target->y - target->y, next_target->x - target->x) : begin_ang;
+
+        DubinsPath my_path;
+        double a[3] = {current->x, current->y, begin_ang};
+        double b[3] = {target->x, target->y, end_ang};
+        dubins_shortest_path(&my_path, a, b, 1.0 / kp);
+
+        std::vector<Pose> my_path_samples;
+        dubins_path_sample_many(&my_path, 0.001, createDubinsSteps, &my_path_samples);
+
+        int path_type = dubins_path_type(&my_path);
+        for (int k = 0; k < my_path_samples.size(); k++) {
+            if (my_path_samples[k].s <= dubins_segment_length(&my_path, 0)) {
+                if (path_type >= 2 && path_type <= 4) {
+                    my_path_samples[k].kappa = -my_path_samples[k].kappa;
+                }
+            } else if (my_path_samples[k].s <=
+                       dubins_segment_length(&my_path, 0) + dubins_segment_length(&my_path, 1)) {
+                if (path_type >= 0 && path_type <= 3) {
+                    my_path_samples[k].kappa = 0;
+                } else if (path_type == 5) {
+                    my_path_samples[k].kappa = -my_path_samples[k].kappa;
+                }
+                my_path_samples[k].s -= dubins_segment_length(&my_path, 0);
+            } else {
+                if (path_type == 1 || path_type == 3 || path_type == 4) {
+                    my_path_samples[k].kappa = -my_path_samples[k].kappa;
+                }
+                my_path_samples[k].s -= dubins_segment_length(&my_path, 0) + dubins_segment_length(&my_path, 1);
+            }
+        }
+
+        path.points.insert(path.points.end(), my_path_samples.begin(), my_path_samples.end());
+
+        begin_ang = end_ang;
+        current = target;
+    }
 }
 
 void Plan::showMap(cv::Mat map) {

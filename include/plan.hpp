@@ -29,7 +29,7 @@ class Plan {
     Plan();
     ~Plan();
 
-    void initialize(const Polygon &borders, const std::vector<Polygon> &obstacle_list,
+    void plan(const Polygon &borders, const std::vector<Polygon> &obstacle_list,
                     const std::vector<std::pair<int, Polygon>> &victim_list, const Polygon &gate, const float x,
                     const float y, const float theta, Path &path, const std::string &config_folder);
 
@@ -42,9 +42,10 @@ class Plan {
     std::vector<Polygon> marginObstacles(std::vector<Polygon> obstacles);
     std::vector<Point> getFreePoints(std::vector<Point> points, const std::vector<Polygon> &margined_obstacle_list,
                                      const std::vector<std::pair<int, Polygon>> &victim_list, const Polygon &gate);
-    void createGraph(cv::Mat &map, std::vector<Point> halton_points,
+    void createGraph(cv::Mat &map, std::vector<Point> halton_points, const std::vector<Polygon> &margined_obstacle_list,
                      const std::vector<std::pair<int, Polygon>> &victim_list, const Polygon &gate, const float x,
                      const float y);
     std::vector<Node *> findRoute(Node *source, Node *target);
-    void drawRoute(cv::Mat &img, std::vector<Node *> route);
+    void drawRoute(cv::Mat &img, std::vector<Node *> route, int thickness);
+    std::vector<Node *> smoothRoute(std::vector<Node *> route, const std::vector<Polygon> &margined_obstacle_list);
 };
