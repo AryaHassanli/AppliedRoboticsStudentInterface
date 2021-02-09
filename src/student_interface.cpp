@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "dubins.hpp"
 #include "map.hpp"
 #include "my_utils.hpp"
 #include "plan.hpp"
@@ -163,7 +164,7 @@ bool extrinsicCalib(const cv::Mat &img_in, std::vector<cv::Point3f> object_point
     std::vector<cv::Point2f> image_points;
 
     if (!std::experimental::filesystem::exists(file_path)) {
-        //TODO: Ask to use previous configuration
+        // TODO: Ask to use previous configuration
         std::experimental::filesystem::create_directories(config_folder);
 
         image_points = utils.pickNPoints(4, img_in, " For Extrinsic Calibration");
@@ -264,11 +265,11 @@ bool findRobot(const cv::Mat &img_in, const double scale, Polygon &triangle, dou
             cv::imshow("Robot", img_in);
             cv::waitKey(1);
         }
-
-        theta = std::atan2(y - triangle[0].y, x - triangle[0].x);
         x = robot_center.x;
         y = robot_center.y;
-        // std::cout << " Robot x: " << x << ", y: " << y << ", theta: " << theta << "\n";
+        theta = std::atan2(y - triangle[0].y, x - triangle[0].x);
+
+        std::cout << " Robot x: " << x << ", y: " << y << ", theta: " << theta << "\n";
         return true;
     } else {
         return false;
@@ -279,22 +280,7 @@ static Plan plan;
 bool planPath(const Polygon &borders, const std::vector<Polygon> &obstacle_list,
               const std::vector<std::pair<int, Polygon>> &victim_list, const Polygon &gate, const float x,
               const float y, const float theta, Path &path, const std::string &config_folder) {
-    plan.initialize(borders, obstacle_list, victim_list, gate, x, y, theta, path, config_folder);
-    /**
-    float xc = 0, yc = 0, r = 1.4;
-    float ds = 0.05;
-    for (float theta = -M_PI / 2, s = 0; theta < (-M_PI / 2 + 1.2); theta += ds / r, s += ds) {
-        path.points.emplace_back(s, xc + r * std::cos(theta), yc + r * std::sin(theta), theta + M_PI / 2, 1. / r);
-    }
-    /**/
-
-    /**
-    float xc = 0, yc = 1.5, r = 1.4;
-    float ds = 0.05;
-    for (float theta = theta, s = 0; theta < (-M_PI / 2 + 1.2); theta += ds / r, s += ds) {
-        path.points.emplace_back(s, xc + r * std::cos(theta), yc + r * std::sin(theta), theta + M_PI / 2, 1. / r);
-    }
-    /**/
+    plan.plan(borders, obstacle_list, victim_list, gate, x, y, theta, path, config_folder);
     return true;
 }
 
