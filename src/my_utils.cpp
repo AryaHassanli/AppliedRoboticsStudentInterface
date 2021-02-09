@@ -116,6 +116,53 @@ Point MyUtils::scalePoint(Point point, double scale) {
 
 cv::Point2f MyUtils::cvPoint(Point point) { return cv::Point2f(point.x, point.y); }
 
+bool MyUtils::segSegCollision(Point a1, Point a2, Point b1, Point b2) {
+    double x1 = a1.x;
+    double x2 = a2.x;
+    double x3 = b1.x;
+    double x4 = b2.x;
+    double y1 = a1.y;
+    double y2 = a2.y;
+    double y3 = b1.y;
+    double y4 = b2.y;
+    double epsilon = 0.0000001;
+    double det = (x4 - x3) * (y1 - y2) - (x1 - x2) * (y4 - y3);
+    if (det <= epsilon) {
+        return false; // TODO: Parallel collided lines!
+    } else {
+        double t = (y3 - y4) * (x1 - x3) + (x4 - x3) * (y1 - y3);
+        t /= det;
+        double u = (y1 - y2) * (x1 - x3) + (x2 - x1) * (y1 - y3);
+        u /= det;
+        if (t >= 0 && t <= 1 && u >= 0 && u <= 1) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+}
+
+bool MyUtils::segPolyCollision(Point a1, Point a2, Polygon poly) {
+    for (int i = 0; i < poly.size() - 1; i++) {
+        if (segSegCollision(a1, a2, poly[i], poly[i + 1])) {
+            return true;
+        }
+    }
+    if (segSegCollision(a1, a2, poly[poly.size() - 1], poly[0])) {
+        return true;
+    }
+    return false;
+}
+
+bool MyUtils::segPolysCollision(Point a1, Point a2, std::vector<Polygon> polys) {
+    for (int i = 0; i < polys.size(); i++) {
+        if (segPolyCollision(a1, a2, polys[i])) {
+            return true;
+        }
+    }
+    return false;
+}
+
 MyUtils::~MyUtils(){
 
 };

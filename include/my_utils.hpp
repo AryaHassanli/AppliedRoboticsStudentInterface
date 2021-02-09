@@ -33,6 +33,10 @@ class MyUtils {
     static void drawPoly(cv::Mat &img, Polygon poly, double scale, cv::Scalar color, int thickness);
     static void drawPoints(cv::Mat &img, std::vector<Point> points, double scale, cv::Scalar color, int thickness);
 
+    static bool segSegCollision(Point a1, Point a2, Point b1, Point b2);
+    static bool segPolyCollision(Point a1, Point a2, Polygon poly);
+    static bool segPolysCollision(Point a1, Point a2, std::vector<Polygon> polys);
+    
     ~MyUtils();
 
    private:
