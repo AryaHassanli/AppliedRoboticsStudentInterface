@@ -34,6 +34,7 @@ add_library(student SHARED
   src/map.cpp
   src/plan.cpp
   src/halton.cpp
+  src/dubins.cpp
   src/student_interface.cpp
 )
 
