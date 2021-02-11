@@ -14,9 +14,9 @@
 static MyUtils utils;
 
 struct Threshold {
-    uchar h = 5;
-    uchar s = 50;
-    uchar v = 50;
+    uchar h = 10;
+    uchar s = 60;
+    uchar v = 70;
 } threshold;
 
 Map::Map() { is_initialized = false; }
@@ -254,15 +254,17 @@ void Map::findObstacles(const cv::Mat &mask_in, std::vector<Polygon> &obstacles,
     }
 }
 
+const double MIN_AREA_SIZE = 100;
+
 void Map::findGate(const cv::Mat &mask_in, Polygon &gate, const double scale) {
     std::vector<std::vector<cv::Point>> contours, contours_approx;
     std::vector<cv::Point> approx_curve;
 
     cv::findContours(mask_in, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
     for (int i = 0; i < contours.size(); i++) {
-        approxPolyDP(contours[i], approx_curve, 5, true);
+        approxPolyDP(contours[i], approx_curve, 8, true);
 
-        if (approx_curve.size() != 4) {
+        if (approx_curve.size() != 4 || cv::contourArea(contours[i]) < MIN_AREA_SIZE * 2 / 3) {
             continue;
         }
 
@@ -273,8 +275,6 @@ void Map::findGate(const cv::Mat &mask_in, Polygon &gate, const double scale) {
         gate = scaled_contour;
     }
 }
-
-const double MIN_AREA_SIZE = 100;
 
 void Map::findVictims(const cv::Mat &img_in, const cv::Mat &mask_in, std::vector<std::pair<int, Polygon>> &victims,
                       const double scale) {
@@ -323,7 +323,7 @@ void Map::findVictims(const cv::Mat &img_in, const cv::Mat &mask_in, std::vector
         cv::dilate(processROI, processROI, kernel);
         cv::GaussianBlur(processROI, processROI, cv::Size(13, 13), 2, 2);
         cv::erode(processROI, processROI, kernel);
-        
+
         // Apply more additional smoothing and filtering
         cv::dilate(processROI, processROI, kernel);
         cv::GaussianBlur(processROI, processROI, cv::Size(13, 13), 2, 2);
