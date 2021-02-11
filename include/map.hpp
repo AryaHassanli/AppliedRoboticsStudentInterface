@@ -31,7 +31,7 @@ class Map {
     static void findObstacles(const cv::Mat &mask_in, std::vector<Polygon> &obstacles, const double scale);
     static void findGate(const cv::Mat &mask_in, Polygon &gate, const double scale);
     static void findVictims(const cv::Mat &img_in, const cv::Mat &mask_in,
-                            std::vector<std::pair<int, Polygon>> &victims, const double scale, const bool show_ocr);
+                            std::vector<std::pair<int, Polygon>> &victims, const double scale);
 
     static void getRobotBounds(const cv::Mat &img_in, std::vector<MaskBound> &mask_bounds,
                                const std::string &config_folder);
