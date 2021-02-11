@@ -200,7 +200,7 @@ bool processMap(const cv::Mat &img_in, const double scale, std::vector<Polygon> 
     cv::Mat gaussian;
     cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size((2 * 2) + 1, (2 * 2) + 1));
 
-    cv::GaussianBlur(img_in, gaussian, cv::Size(5, 5), 0);
+    cv::GaussianBlur(img_in, gaussian, cv::Size(11, 11), 0);
     cv::erode(gaussian, gaussian, kernel);
     cv::dilate(gaussian, gaussian, kernel);
 
