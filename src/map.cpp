@@ -14,7 +14,7 @@
 static MyUtils utils;
 
 struct Threshold {
-    uchar h = 10;
+    uchar h = 12;
     uchar s = 60;
     uchar v = 70;
 } threshold;

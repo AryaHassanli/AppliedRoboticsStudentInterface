@@ -215,6 +215,16 @@ bool processMap(const cv::Mat &img_in, const double scale, std::vector<Polygon> 
     map.applyMasks(gaussian, victim_mask_bounds, victim_mask);
     map.applyMasks(gaussian, gate_mask_bounds, gate_mask);
 
+    cv::GaussianBlur(obstacle_mask, obstacle_mask, cv::Size(5, 5), 0);
+    cv::erode(obstacle_mask, obstacle_mask, kernel);
+    cv::dilate(obstacle_mask, obstacle_mask, kernel);
+
+    cv::GaussianBlur(gate_mask, gate_mask, cv::Size(11, 11), 0);
+    cv::erode(gate_mask, gate_mask, kernel);
+    cv::dilate(gate_mask, gate_mask, kernel);
+    cv::erode(gate_mask, gate_mask, kernel);
+    cv::dilate(gate_mask, gate_mask, kernel);    
+    
     if (SHOW_MASKS) {
         cv::imshow("Obstacle Mask", obstacle_mask);
         cv::waitKey(0);
@@ -233,6 +243,9 @@ bool processMap(const cv::Mat &img_in, const double scale, std::vector<Polygon> 
     map.findVictims(gaussian, victim_mask, victim_list, scale);
     map.findGate(gate_mask, gate, scale);
 
+    if(!gate.size()){
+        std::cout << "No Gate Found" << std::endl;
+    }
     return true;
 }
 
